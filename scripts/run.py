@@ -29,17 +29,22 @@ from src.triage.agent import TriageAgent
 from src.triage.budget import TriageBudget
 from src.triage.context import ContextBuilder
 from src.triage.loop import TriageLoop
+from src.swarm.agents import SwarmAgents
+from src.swarm.evidence import EvidenceCollector
+from src.swarm.loop import SwarmLoop
 
 logger = structlog.get_logger("Auriferous")
 
 JOB_SENTINEL = "sentinel"
 JOB_TRIAGE = "triage"
+JOB_SWARM = "swarm"
 JOB_PDUFA = "pdufa_refresh"
 JOB_EARNINGS = "earnings_refresh"
 JOB_UNIVERSE = "universe_refresh"
 
 TIMEOUT_SENTINEL = 300.0
 TIMEOUT_TRIAGE = 900.0
+TIMEOUT_SWARM = 1800.0
 TIMEOUT_PDUFA = 3600.0
 TIMEOUT_EARNINGS = 3600.0
 TIMEOUT_UNIVERSE = 14400.0
@@ -66,6 +71,7 @@ def _register_jobs(
     config: AuriferousConfig,
     sentinel: SentinelLoop,
     triage: TriageLoop | None,
+    swarm: SwarmLoop | None,
     universe: UniverseIndex,
 ) -> None:
 
@@ -74,6 +80,9 @@ def _register_jobs(
 
     async def run_triage() -> None:
         await triage.run()
+
+    async def run_swarm() -> None:
+        await swarm.run()
 
     async def run_pdufa_refresh() -> None:
         from scripts.refresh_pdufa import main as refresh_pdufa_main
@@ -103,6 +112,13 @@ def _register_jobs(
         interval_seconds=config.jobs.triage_seconds,
         max_timeout=TIMEOUT_TRIAGE,
         enabled=triage is not None,
+    )
+    scheduler.register(
+        job_id=JOB_SWARM,
+        callback=run_swarm,
+        interval_seconds=config.jobs.swarm_seconds,
+        max_timeout=TIMEOUT_SWARM,
+        enabled=swarm is not None,
     )
     scheduler.register(
         job_id=JOB_PDUFA,
@@ -147,6 +163,30 @@ def _build_triage(config: AuriferousConfig, universe: UniverseIndex) -> TriageLo
     )
 
 
+def _build_swarm(config: AuriferousConfig, universe: UniverseIndex) -> SwarmLoop | None:
+    if not config.llm.api_key:
+        return None
+
+    from langchain_openai import ChatOpenAI
+
+    llm = ChatOpenAI(
+        model=config.llm.model,
+        temperature=config.llm.temperature,
+        api_key=config.llm.api_key,
+        timeout=config.llm.timeout_seconds,
+    )
+
+    return SwarmLoop(
+        agents=SwarmAgents(
+            llm,
+            cost_per_1m_input=config.llm.cost_per_1m_input,
+            cost_per_1m_output=config.llm.cost_per_1m_output,
+        ),
+        collector=EvidenceCollector(universe, fetch_filings=config.swarm.fetch_filing_text),
+        config=config.swarm,
+    )
+
+
 async def main(config_path: str = "config/auriferous.yaml") -> None:
     config = ConfigLoader.load(config_path=config_path)
     _configure_logging(config)
@@ -185,14 +225,15 @@ async def main(config_path: str = "config/auriferous.yaml") -> None:
     ])
 
     triage = _build_triage(config, universe)
-    if triage is None:
+    swarm = _build_swarm(config, universe)
+    if triage is None or swarm is None:
         logger.warning(
-            "triage_disabled",
-            note="no OPENAI_API_KEY — sentinel will collect events but nothing will filter them",
+            "llm_stages_disabled",
+            note="no OPENAI_API_KEY — sentinel will collect events but nothing will analyse them",
         )
 
     scheduler = SchedulerManager.get_instance()
-    _register_jobs(scheduler, config, sentinel, triage, universe)
+    _register_jobs(scheduler, config, sentinel, triage, swarm, universe)
 
     try:
         await scheduler.start()

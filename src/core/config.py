@@ -74,6 +74,8 @@ class LLMConfig(BaseModel):
     max_tokens: int = Field(default=4096, ge=256)
     timeout_seconds: int = Field(default=300, ge=10)
     api_key: Optional[str] = None
+    cost_per_1m_input: float = Field(default=1.25, ge=0)
+    cost_per_1m_output: float = Field(default=10.0, ge=0)
 
 
 class SentinelConfig(BaseModel):
@@ -91,6 +93,7 @@ class SentinelConfig(BaseModel):
 class JobsConfig(BaseModel):
     sentinel_seconds: int = Field(default=30, ge=10)
     triage_seconds: int = Field(default=60, ge=15)
+    swarm_seconds: int = Field(default=120, ge=30)
     pdufa_refresh_seconds: int = Field(default=604800, ge=3600)
     universe_refresh_seconds: int = Field(default=604800, ge=3600)
     earnings_refresh_seconds: int = Field(default=86400, ge=3600)
@@ -108,6 +111,9 @@ class SwarmConfig(BaseModel):
     redteam_kill_threshold: float = Field(default=0.70, gt=0, le=1.0)
     pricedin_veto_threshold: float = Field(default=0.65, gt=0, le=1.0)
     min_conviction: float = Field(default=0.55, gt=0, le=1.0)
+    max_per_day: int = Field(default=25, ge=1)
+    max_cost_usd_per_day: float = Field(default=8.0, gt=0)
+    fetch_filing_text: bool = True
 
 
 class StructurerConfig(BaseModel):

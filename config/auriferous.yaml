@@ -44,6 +44,7 @@ sentinel:
 jobs:
   sentinel_seconds: 30
   triage_seconds: 60
+  swarm_seconds: 120
   pdufa_refresh_seconds: 604800
   universe_refresh_seconds: 604800
   earnings_refresh_seconds: 86400
@@ -59,6 +60,9 @@ swarm:
   redteam_kill_threshold: 0.70
   pricedin_veto_threshold: 0.65
   min_conviction: 0.55
+  max_per_day: 25
+  max_cost_usd_per_day: 8.0
+  fetch_filing_text: true
 
 structurer:
   max_spread_pct: 0.12
