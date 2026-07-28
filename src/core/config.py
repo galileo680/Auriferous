@@ -88,6 +88,15 @@ class SentinelConfig(BaseModel):
     contact_email: str = ""
 
 
+class JobsConfig(BaseModel):
+    sentinel_seconds: int = Field(default=30, ge=10)
+    pdufa_refresh_seconds: int = Field(default=604800, ge=3600)
+    universe_refresh_seconds: int = Field(default=604800, ge=3600)
+    earnings_refresh_seconds: int = Field(default=86400, ge=3600)
+    pdufa_lookback_days: int = Field(default=180, ge=30)
+    universe_refresh_enabled: bool = False
+
+
 class TriageConfig(BaseModel):
     min_expected_move_pct: float = Field(default=8.0, gt=0)
     max_per_day: int = Field(default=400, ge=1)
@@ -179,6 +188,7 @@ class AuriferousConfig(BaseModel):
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
     sentinel: SentinelConfig = Field(default_factory=SentinelConfig)
+    jobs: JobsConfig = Field(default_factory=JobsConfig)
     triage: TriageConfig = Field(default_factory=TriageConfig)
     swarm: SwarmConfig = Field(default_factory=SwarmConfig)
     structurer: StructurerConfig = Field(default_factory=StructurerConfig)

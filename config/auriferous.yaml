@@ -41,6 +41,14 @@ sentinel:
   pdufa_window_days: [-5, 2]
   contact_email: 'kyyk1487@gmail.com'
 
+jobs:
+  sentinel_seconds: 30
+  pdufa_refresh_seconds: 604800
+  universe_refresh_seconds: 604800
+  earnings_refresh_seconds: 86400
+  pdufa_lookback_days: 180
+  universe_refresh_enabled: false
+
 triage:
   min_expected_move_pct: 8.0
   max_per_day: 400
