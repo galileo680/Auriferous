@@ -3,17 +3,13 @@ pyyaml>=6.0.1
 pydantic>=2.5.3
 pydantic-settings>=2.1.0
 typing-extensions>=4.9.0
-email-validator>=2.1.0
 python-dateutil>=2.8.2
 pytz>=2024.1
-orjson>=3.9.12
-cachetools>=5.3.2
 structlog>=24.1.0
 
 sqlalchemy>=2.0.25
 asyncpg>=0.29.0
 aiosqlite>=0.19.0
-alembic>=1.13.1
 greenlet>=3.0.3
 
 ib_async>=2.1.0
@@ -21,27 +17,17 @@ nest-asyncio>=1.6.0
 yfinance>=0.2.36
 pandas>=2.1.4
 numpy>=1.26.3
-stockstats>=0.6.2
-ta>=0.11.0
-finnhub-python>=2.4.19
-alpha-vantage>=2.3.1
-newsapi-python>=0.2.7
 
 openai>=1.12.0
-tiktoken>=0.5.2
-transformers>=4.37.0
-
 langchain>=0.3.0
 langchain-core>=0.3.0
 langchain-openai>=0.1.0
-langchain-community>=0.3.0
 langgraph
 
 aiohttp>=3.9.3
 httpx>=0.26.0
 tenacity>=8.2.3
-aiosmtplib>=3.0.1
 apscheduler>=3.10.4
 
-praw>=7.7.1
-tweepy>=4.14.0
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
