@@ -14,6 +14,8 @@ logger = structlog.get_logger("Universe")
 UNIVERSE_PATH = Path("data/universe_auriferous.csv")
 FIELDNAMES = ("ticker", "name", "sector", "market_cap", "price", "dollar_volume", "option_oi", "cik")
 
+SECTOR_UNKNOWN = "UNKNOWN"
+
 
 @dataclass(frozen=True)
 class UniverseEntry:
@@ -25,6 +27,11 @@ class UniverseEntry:
     dollar_volume: Optional[float] = None
     option_oi: Optional[int] = None
     cik: Optional[str] = None
+
+
+def normalize_sector(value: str | None) -> str:
+    cleaned = (value or "").strip()
+    return cleaned if cleaned else SECTOR_UNKNOWN
 
 
 def passes_filters(entry: UniverseEntry, config: UniverseConfig) -> tuple[bool, list[str]]:
@@ -70,7 +77,7 @@ def load_universe(path: Path | str = UNIVERSE_PATH) -> list[UniverseEntry]:
             entries.append(UniverseEntry(
                 ticker=ticker,
                 name=(row.get("name") or "").strip(),
-                sector=(row.get("sector") or "").strip() or None,
+                sector=normalize_sector(row.get("sector")),
                 market_cap=_to_float(row.get("market_cap")),
                 price=_to_float(row.get("price")),
                 dollar_volume=_to_float(row.get("dollar_volume")),

@@ -13,8 +13,10 @@ import structlog
 from src.core.config import ConfigLoader, UniverseConfig
 from src.dataflows.edgar import EdgarClient
 from src.sentinel.universe import (
+    SECTOR_UNKNOWN,
     UNIVERSE_PATH,
     UniverseEntry,
+    normalize_sector,
     passes_filters,
     save_universe,
 )
@@ -30,8 +32,7 @@ def probe_ticker(ticker: str, cik: str, name: str) -> UniverseEntry | None:
     import yfinance as yf
 
     try:
-        handle = yf.Ticker(ticker)
-        info = handle.fast_info
+        info = yf.Ticker(ticker).fast_info
 
         price = float(info.last_price or 0)
         market_cap = float(info.market_cap or 0)
@@ -51,6 +52,49 @@ def probe_ticker(ticker: str, cik: str, name: str) -> UniverseEntry | None:
         )
     except Exception:
         return None
+
+
+def probe_sector(ticker: str) -> str:
+    import yfinance as yf
+
+    try:
+        return normalize_sector(yf.Ticker(ticker).info.get("sector"))
+    except Exception:
+        return SECTOR_UNKNOWN
+
+
+def attach_sectors(entries: list[UniverseEntry]) -> list[UniverseEntry]:
+    logger.info("sector_pass_start", tickers=len(entries))
+
+    resolved: dict[str, str] = {}
+    with ThreadPoolExecutor(max_workers=WORKERS) as pool:
+        futures = {pool.submit(probe_sector, e.ticker): e.ticker for e in entries}
+        for done, future in enumerate(as_completed(futures), start=1):
+            resolved[futures[future]] = future.result()
+            if done % PROGRESS_EVERY == 0:
+                logger.info("sector_pass_progress", done=done, total=len(entries))
+
+    unknown = sum(1 for s in resolved.values() if s == SECTOR_UNKNOWN)
+    logger.info(
+        "sector_pass_complete",
+        resolved=len(resolved) - unknown,
+        unknown=unknown,
+        note="UNKNOWN entries share one bucket in the sector exposure limit",
+    )
+
+    return [
+        UniverseEntry(
+            ticker=e.ticker,
+            name=e.name,
+            sector=resolved.get(e.ticker, SECTOR_UNKNOWN),
+            market_cap=e.market_cap,
+            price=e.price,
+            dollar_volume=e.dollar_volume,
+            option_oi=e.option_oi,
+            cik=e.cik,
+        )
+        for e in entries
+    ]
 
 
 def load_cache() -> dict[str, dict]:
@@ -153,6 +197,7 @@ async def main(config_path: str = "config/auriferous.yaml", fresh: bool = False)
         await client.close()
 
     accepted = screen(seeds, config.universe, use_cache=not fresh)
+    accepted = attach_sectors(accepted)
     written = save_universe(accepted, UNIVERSE_PATH)
 
     logger.info(

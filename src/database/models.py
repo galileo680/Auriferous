@@ -24,10 +24,14 @@ class Base(DeclarativeBase):
 
 
 EVENT_STATUS_NEW = "NEW"
+EVENT_STATUS_QUEUED = "QUEUED_FOR_OPEN"
 EVENT_STATUS_TRIAGED = "TRIAGED"
 EVENT_STATUS_ANALYZED = "ANALYZED"
 EVENT_STATUS_REJECTED = "REJECTED"
 EVENT_STATUS_TRADED = "TRADED"
+EVENT_STATUS_EXPIRED = "EXPIRED"
+
+EVENT_STATUS_PENDING = (EVENT_STATUS_NEW, EVENT_STATUS_QUEUED)
 
 TRADE_STATUS_PENDING = "PENDING"
 TRADE_STATUS_OPEN = "OPEN"
@@ -143,6 +147,7 @@ class Trade(Base):
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
     entry_price: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 4), nullable=True)
     entry_filled_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    commission_total: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False, default=0)
     capital_at_risk: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     kelly_fraction_used: Mapped[Optional[Decimal]] = mapped_column(Numeric(6, 4), nullable=True)
     invalidation: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
