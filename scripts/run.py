@@ -25,15 +25,21 @@ from src.sentinel.sources import (
 )
 from src.sentinel.sources.earnings import refresh_calendar
 from src.sentinel.universe import UniverseIndex, load_universe
+from src.triage.agent import TriageAgent
+from src.triage.budget import TriageBudget
+from src.triage.context import ContextBuilder
+from src.triage.loop import TriageLoop
 
 logger = structlog.get_logger("Auriferous")
 
 JOB_SENTINEL = "sentinel"
+JOB_TRIAGE = "triage"
 JOB_PDUFA = "pdufa_refresh"
 JOB_EARNINGS = "earnings_refresh"
 JOB_UNIVERSE = "universe_refresh"
 
 TIMEOUT_SENTINEL = 300.0
+TIMEOUT_TRIAGE = 900.0
 TIMEOUT_PDUFA = 3600.0
 TIMEOUT_EARNINGS = 3600.0
 TIMEOUT_UNIVERSE = 14400.0
@@ -59,11 +65,15 @@ def _register_jobs(
     scheduler: SchedulerManager,
     config: AuriferousConfig,
     sentinel: SentinelLoop,
+    triage: TriageLoop | None,
     universe: UniverseIndex,
 ) -> None:
 
     async def run_sentinel() -> None:
         await sentinel.run()
+
+    async def run_triage() -> None:
+        await triage.run()
 
     async def run_pdufa_refresh() -> None:
         from scripts.refresh_pdufa import main as refresh_pdufa_main
@@ -88,6 +98,13 @@ def _register_jobs(
         max_timeout=TIMEOUT_SENTINEL,
     )
     scheduler.register(
+        job_id=JOB_TRIAGE,
+        callback=run_triage,
+        interval_seconds=config.jobs.triage_seconds,
+        max_timeout=TIMEOUT_TRIAGE,
+        enabled=triage is not None,
+    )
+    scheduler.register(
         job_id=JOB_PDUFA,
         callback=run_pdufa_refresh,
         interval_seconds=config.jobs.pdufa_refresh_seconds,
@@ -106,6 +123,27 @@ def _register_jobs(
         max_timeout=TIMEOUT_UNIVERSE,
         enabled=config.jobs.universe_refresh_enabled,
         run_on_start=False,
+    )
+
+
+def _build_triage(config: AuriferousConfig, universe: UniverseIndex) -> TriageLoop | None:
+    if not config.llm.api_key:
+        return None
+
+    from langchain_openai import ChatOpenAI
+
+    fast_llm = ChatOpenAI(
+        model=config.llm.fast_model,
+        temperature=config.llm.temperature,
+        api_key=config.llm.api_key,
+        timeout=config.llm.timeout_seconds,
+    )
+
+    return TriageLoop(
+        agent=TriageAgent(fast_llm),
+        context_builder=ContextBuilder(universe),
+        budget=TriageBudget(config.triage),
+        config=config.triage,
     )
 
 
@@ -146,8 +184,15 @@ async def main(config_path: str = "config/auriferous.yaml") -> None:
         CryptoFlowSource(),
     ])
 
+    triage = _build_triage(config, universe)
+    if triage is None:
+        logger.warning(
+            "triage_disabled",
+            note="no OPENAI_API_KEY — sentinel will collect events but nothing will filter them",
+        )
+
     scheduler = SchedulerManager.get_instance()
-    _register_jobs(scheduler, config, sentinel, universe)
+    _register_jobs(scheduler, config, sentinel, triage, universe)
 
     try:
         await scheduler.start()

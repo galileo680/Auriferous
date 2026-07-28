@@ -90,6 +90,7 @@ class SentinelConfig(BaseModel):
 
 class JobsConfig(BaseModel):
     sentinel_seconds: int = Field(default=30, ge=10)
+    triage_seconds: int = Field(default=60, ge=15)
     pdufa_refresh_seconds: int = Field(default=604800, ge=3600)
     universe_refresh_seconds: int = Field(default=604800, ge=3600)
     earnings_refresh_seconds: int = Field(default=86400, ge=3600)

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.clock import utcnow_naive
@@ -100,6 +100,16 @@ class EventRepository(BaseRepository[Event]):
         if event.detected_at is None:
             return 0.0
         return (utcnow_naive() - event.detected_at).total_seconds() / 3600
+
+    async def count_triaged_since(self, hours: int) -> int:
+        cutoff = utcnow_naive() - timedelta(hours=hours)
+        result = await self.session.execute(
+            select(func.count(self.model.id)).where(
+                self.model.triage_result.isnot(None),
+                self.model.processed_at >= cutoff,
+            )
+        )
+        return result.scalar() or 0
 
     async def count_since(self, hours: int) -> int:
         cutoff = utcnow_naive() - timedelta(hours=hours)

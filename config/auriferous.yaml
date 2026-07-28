@@ -43,6 +43,7 @@ sentinel:
 
 jobs:
   sentinel_seconds: 30
+  triage_seconds: 60
   pdufa_refresh_seconds: 604800
   universe_refresh_seconds: 604800
   earnings_refresh_seconds: 86400
