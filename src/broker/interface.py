@@ -8,6 +8,7 @@ from src.broker.models import (
     InstrumentSpec,
     MarginImpact,
     OptionQuote,
+    OrderFill,
     OrderResult,
     OrderSide,
     OrderStatus,
@@ -106,4 +107,8 @@ class BrokerInterface(ABC):
 
     @abstractmethod
     async def get_order_status(self, order_id: str) -> OrderStatus:
+        ...
+
+    @abstractmethod
+    async def get_order_fill(self, order_id: str) -> OrderFill:
         ...

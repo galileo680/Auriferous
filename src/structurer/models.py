@@ -151,6 +151,9 @@ class StructuredTrade:
             "net_debit_per_unit": self.net_debit_per_unit,
             "max_loss_per_unit": self.max_loss_per_unit,
             "underlying_price": self.underlying_price,
+            "target_move_pct": self.target_move_pct,
+            "horizon_days": self.horizon_days,
+            "invalidation": self.invalidation,
             "iv": self.iv.to_dict(),
             "notes": self.notes,
         }

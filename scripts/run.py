@@ -32,11 +32,14 @@ from src.swarm.agents import SwarmAgents
 from src.swarm.evidence import EvidenceCollector
 from src.swarm.loop import SwarmLoop
 from src.broker.ibkr import IBKRClient
-from src.structurer.loop import StructurerLoop
+from src.core.market_clock import MarketClock
 from src.database.repositories.equity import EquityRepository
+from src.executor.engine import ExecutionEngine
+from src.executor.loop import ExecutorLoop
 from src.risk.budget import daily_llm_budget
 from src.risk.governor import RiskGovernor
 from src.risk.loop import GovernorLoop
+from src.structurer.loop import StructurerLoop
 
 logger = structlog.get_logger("Auriferous")
 
@@ -45,6 +48,7 @@ JOB_TRIAGE = "triage"
 JOB_SWARM = "swarm"
 JOB_STRUCTURER = "structurer"
 JOB_GOVERNOR = "governor"
+JOB_EXECUTOR = "executor"
 JOB_PDUFA = "pdufa_refresh"
 JOB_EARNINGS = "earnings_refresh"
 JOB_UNIVERSE = "universe_refresh"
@@ -54,6 +58,7 @@ TIMEOUT_TRIAGE = 900.0
 TIMEOUT_SWARM = 1800.0
 TIMEOUT_STRUCTURER = 900.0
 TIMEOUT_GOVERNOR = 300.0
+TIMEOUT_EXECUTOR = 600.0
 TIMEOUT_PDUFA = 3600.0
 TIMEOUT_EARNINGS = 3600.0
 TIMEOUT_UNIVERSE = 14400.0
@@ -83,6 +88,7 @@ def _register_jobs(
     swarm: SwarmLoop | None,
     structurer: StructurerLoop | None,
     governor: GovernorLoop,
+    executor: ExecutorLoop | None,
     universe: UniverseIndex,
 ) -> None:
 
@@ -100,6 +106,9 @@ def _register_jobs(
 
     async def run_governor() -> None:
         await governor.run()
+
+    async def run_executor() -> None:
+        await executor.run()
 
     async def run_pdufa_refresh() -> None:
         from scripts.refresh_pdufa import main as refresh_pdufa_main
@@ -149,6 +158,13 @@ def _register_jobs(
         callback=run_governor,
         interval_seconds=config.jobs.governor_seconds,
         max_timeout=TIMEOUT_GOVERNOR,
+    )
+    scheduler.register(
+        job_id=JOB_EXECUTOR,
+        callback=run_executor,
+        interval_seconds=config.jobs.executor_seconds,
+        max_timeout=TIMEOUT_EXECUTOR,
+        enabled=executor is not None,
     )
     scheduler.register(
         job_id=JOB_PDUFA,
@@ -276,21 +292,24 @@ async def main(config_path: str = "config/auriferous.yaml") -> None:
 
     broker = IBKRClient(config.broker)
     structurer: StructurerLoop | None = None
+    executor: ExecutorLoop | None = None
     try:
         await broker.connect()
         structurer = StructurerLoop(broker, config.structurer, config.capital.initial_usd)
+        executor = ExecutorLoop(broker, ExecutionEngine(broker), MarketClock())
     except Exception as e:
         logger.warning(
-            "structurer_disabled",
+            "broker_stages_disabled",
             error=str(e),
-            note="IB Gateway unreachable — analysis will run but no contracts will be built",
+            note="IB Gateway unreachable — analysis will run but nothing will be built or executed",
         )
 
     governor = GovernorLoop(RiskGovernor(config.risk, config.capital, universe))
 
     scheduler = SchedulerManager.get_instance()
     _register_jobs(
-        scheduler, config, sentinel, triage, swarm, structurer, governor, universe
+        scheduler, config, sentinel, triage, swarm, structurer, governor, executor,
+        universe,
     )
 
     try:

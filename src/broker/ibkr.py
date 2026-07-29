@@ -17,6 +17,7 @@ from src.broker.models import (
     InstrumentType,
     MarginImpact,
     OptionQuote,
+    OrderFill,
     OrderResult,
     OrderSide,
     OrderStatus,
@@ -542,3 +543,35 @@ class IBKRClient(BrokerInterface):
         if trade is None:
             return OrderStatus.EXPIRED
         return IB_STATUS_MAP.get(trade.orderStatus.status, OrderStatus.PENDING)
+
+    async def get_order_fill(self, order_id: str) -> OrderFill:
+        self._ensure_connected()
+
+        trade = self._find_trade(order_id)
+        if trade is None:
+            return OrderFill(
+                order_id=order_id,
+                status=OrderStatus.EXPIRED,
+                filled_quantity=0,
+                avg_fill_price=0.0,
+                commission=0.0,
+            )
+
+        commission = 0.0
+        for fill in trade.fills:
+            report = fill.commissionReport
+            if report is not None:
+                commission += _safe_float(report.commission, 0.0) or 0.0
+
+        status = IB_STATUS_MAP.get(trade.orderStatus.status, OrderStatus.PENDING)
+        filled = int(_safe_float(trade.orderStatus.filled, 0.0) or 0)
+        if status is OrderStatus.CANCELLED and filled > 0:
+            status = OrderStatus.PARTIALLY_FILLED
+
+        return OrderFill(
+            order_id=order_id,
+            status=status,
+            filled_quantity=filled,
+            avg_fill_price=_safe_float(trade.orderStatus.avgFillPrice, 0.0) or 0.0,
+            commission=commission,
+        )

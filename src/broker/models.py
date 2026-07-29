@@ -196,6 +196,19 @@ class OrderResult:
 
 
 @dataclass
+class OrderFill:
+    order_id: str
+    status: OrderStatus
+    filled_quantity: int
+    avg_fill_price: float
+    commission: float
+
+    @property
+    def has_fill(self) -> bool:
+        return self.filled_quantity > 0
+
+
+@dataclass
 class LiquidityCheck:
     passed: bool
     failures: list[str] = field(default_factory=list)
