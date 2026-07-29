@@ -101,6 +101,7 @@ class JobsConfig(BaseModel):
     reconcile_seconds: int = Field(default=300, ge=60)
     shadow_seconds: int = Field(default=300, ge=60)
     calibration_seconds: int = Field(default=86400, ge=3600)
+    watchdog_seconds: int = Field(default=300, ge=60)
     pdufa_refresh_seconds: int = Field(default=604800, ge=3600)
     universe_refresh_seconds: int = Field(default=604800, ge=3600)
     earnings_refresh_seconds: int = Field(default=86400, ge=3600)
@@ -188,6 +189,11 @@ class ShadowConfig(BaseModel):
     parallel_book_enabled: bool = True
 
 
+class AlertsConfig(BaseModel):
+    enabled: bool = True
+    webhook_url: Optional[str] = None
+
+
 class UniverseConfig(BaseModel):
     min_market_cap: float = Field(default=300_000_000.0, ge=0)
     max_market_cap: float = Field(default=10_000_000_000.0, gt=0)
@@ -212,6 +218,7 @@ class AuriferousConfig(BaseModel):
     risk: RiskConfig = Field(default_factory=RiskConfig)
     positions: PositionsConfig = Field(default_factory=PositionsConfig)
     shadow: ShadowConfig = Field(default_factory=ShadowConfig)
+    alerts: AlertsConfig = Field(default_factory=AlertsConfig)
     universe: UniverseConfig = Field(default_factory=UniverseConfig)
 
     @model_validator(mode="after")
@@ -283,3 +290,7 @@ class ConfigLoader:
             database["user"] = os.getenv("DB_USER")
         if not database.get("password"):
             database["password"] = os.getenv("DB_PASSWORD")
+
+        alerts = raw.setdefault("alerts", {})
+        if not alerts.get("webhook_url"):
+            alerts["webhook_url"] = os.getenv("ALERT_WEBHOOK_URL")

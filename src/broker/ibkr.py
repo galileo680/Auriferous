@@ -84,6 +84,10 @@ class IBKRClient(BrokerInterface):
     def ib(self) -> IB:
         return self._ib
 
+    @property
+    def account(self) -> Optional[str]:
+        return self._account
+
     async def connect(self) -> bool:
         if self._connected and self._ib.isConnected():
             return True

@@ -31,6 +31,8 @@ from src.triage.loop import TriageLoop
 from src.swarm.agents import SwarmAgents
 from src.swarm.evidence import EvidenceCollector
 from src.swarm.loop import SwarmLoop
+from src.alerts.service import AlertService
+from src.alerts.watchdog import WatchdogLoop
 from src.broker.ibkr import IBKRClient
 from src.core.market_clock import MarketClock
 from src.database.repositories.equity import EquityRepository
@@ -60,6 +62,7 @@ JOB_POSITIONS = "positions"
 JOB_RECONCILE = "reconcile"
 JOB_SHADOW = "shadow_sync"
 JOB_CALIBRATION = "calibration"
+JOB_WATCHDOG = "watchdog"
 JOB_PDUFA = "pdufa_refresh"
 JOB_EARNINGS = "earnings_refresh"
 JOB_UNIVERSE = "universe_refresh"
@@ -74,6 +77,7 @@ TIMEOUT_POSITIONS = 600.0
 TIMEOUT_RECONCILE = 120.0
 TIMEOUT_SHADOW = 600.0
 TIMEOUT_CALIBRATION = 600.0
+TIMEOUT_WATCHDOG = 120.0
 TIMEOUT_PDUFA = 3600.0
 TIMEOUT_EARNINGS = 3600.0
 TIMEOUT_UNIVERSE = 14400.0
@@ -108,6 +112,7 @@ def _register_jobs(
     reconcile: ReconcileLoop | None,
     shadow: ShadowSyncLoop | None,
     calibration: CalibratorLoop,
+    watchdog: WatchdogLoop,
     universe: UniverseIndex,
 ) -> None:
 
@@ -140,6 +145,9 @@ def _register_jobs(
 
     async def run_calibration() -> None:
         await calibration.run()
+
+    async def run_watchdog() -> None:
+        await watchdog.run()
 
     async def run_pdufa_refresh() -> None:
         from scripts.refresh_pdufa import main as refresh_pdufa_main
@@ -223,6 +231,12 @@ def _register_jobs(
         callback=run_calibration,
         interval_seconds=config.jobs.calibration_seconds,
         max_timeout=TIMEOUT_CALIBRATION,
+    )
+    scheduler.register(
+        job_id=JOB_WATCHDOG,
+        callback=run_watchdog,
+        interval_seconds=config.jobs.watchdog_seconds,
+        max_timeout=TIMEOUT_WATCHDOG,
     )
     scheduler.register(
         job_id=JOB_PDUFA,
@@ -385,10 +399,18 @@ async def main(config_path: str = "config/auriferous.yaml") -> None:
         ))
     calibration = CalibratorLoop(Calibrator())
 
+    alerts = AlertService(config.alerts)
+    watchdog = WatchdogLoop(alerts, broker if broker.is_connected() else None)
+    if config.alerts.enabled and not config.alerts.webhook_url:
+        logger.warning(
+            "alerts_log_only",
+            note="no webhook_url configured (ALERT_WEBHOOK_URL) — alerts go to the log only",
+        )
+
     scheduler = SchedulerManager.get_instance()
     _register_jobs(
         scheduler, config, sentinel, triage, swarm, structurer, governor, executor,
-        positions, reconcile, shadow, calibration, universe,
+        positions, reconcile, shadow, calibration, watchdog, universe,
     )
 
     try:

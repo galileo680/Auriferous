@@ -52,6 +52,7 @@ jobs:
   reconcile_seconds: 300
   shadow_seconds: 300
   calibration_seconds: 86400
+  watchdog_seconds: 300
   pdufa_refresh_seconds: 604800
   universe_refresh_seconds: 604800
   earnings_refresh_seconds: 86400
@@ -115,6 +116,10 @@ positions:
 shadow:
   enabled: true
   parallel_book_enabled: true
+
+alerts:
+  enabled: true
+  webhook_url: null
 
 universe:
   min_market_cap: 300000000
