@@ -42,6 +42,10 @@ from src.risk.budget import daily_llm_budget
 from src.risk.drawdown import DrawdownTracker
 from src.risk.governor import RiskGovernor
 from src.risk.loop import GovernorLoop
+from src.shadow.book import ShadowBookService
+from src.shadow.calibrator import Calibrator
+from src.shadow.loop import CalibratorLoop, ShadowSyncLoop
+from src.shadow.prices import fetch_prices
 from src.structurer.loop import StructurerLoop
 
 logger = structlog.get_logger("Auriferous")
@@ -54,6 +58,8 @@ JOB_GOVERNOR = "governor"
 JOB_EXECUTOR = "executor"
 JOB_POSITIONS = "positions"
 JOB_RECONCILE = "reconcile"
+JOB_SHADOW = "shadow_sync"
+JOB_CALIBRATION = "calibration"
 JOB_PDUFA = "pdufa_refresh"
 JOB_EARNINGS = "earnings_refresh"
 JOB_UNIVERSE = "universe_refresh"
@@ -66,6 +72,8 @@ TIMEOUT_GOVERNOR = 300.0
 TIMEOUT_EXECUTOR = 600.0
 TIMEOUT_POSITIONS = 600.0
 TIMEOUT_RECONCILE = 120.0
+TIMEOUT_SHADOW = 600.0
+TIMEOUT_CALIBRATION = 600.0
 TIMEOUT_PDUFA = 3600.0
 TIMEOUT_EARNINGS = 3600.0
 TIMEOUT_UNIVERSE = 14400.0
@@ -98,6 +106,8 @@ def _register_jobs(
     executor: ExecutorLoop | None,
     positions: PositionManager | None,
     reconcile: ReconcileLoop | None,
+    shadow: ShadowSyncLoop | None,
+    calibration: CalibratorLoop,
     universe: UniverseIndex,
 ) -> None:
 
@@ -124,6 +134,12 @@ def _register_jobs(
 
     async def run_reconcile() -> None:
         await reconcile.run()
+
+    async def run_shadow() -> None:
+        await shadow.run()
+
+    async def run_calibration() -> None:
+        await calibration.run()
 
     async def run_pdufa_refresh() -> None:
         from scripts.refresh_pdufa import main as refresh_pdufa_main
@@ -194,6 +210,19 @@ def _register_jobs(
         interval_seconds=config.jobs.reconcile_seconds,
         max_timeout=TIMEOUT_RECONCILE,
         enabled=reconcile is not None,
+    )
+    scheduler.register(
+        job_id=JOB_SHADOW,
+        callback=run_shadow,
+        interval_seconds=config.jobs.shadow_seconds,
+        max_timeout=TIMEOUT_SHADOW,
+        enabled=shadow is not None,
+    )
+    scheduler.register(
+        job_id=JOB_CALIBRATION,
+        callback=run_calibration,
+        interval_seconds=config.jobs.calibration_seconds,
+        max_timeout=TIMEOUT_CALIBRATION,
     )
     scheduler.register(
         job_id=JOB_PDUFA,
@@ -347,10 +376,19 @@ async def main(config_path: str = "config/auriferous.yaml") -> None:
 
     governor = GovernorLoop(RiskGovernor(config.risk, config.capital, universe))
 
+    shadow: ShadowSyncLoop | None = None
+    if config.shadow.enabled:
+        shadow = ShadowSyncLoop(ShadowBookService(
+            prices=fetch_prices,
+            broker=broker if broker.is_connected() else None,
+            parallel_enabled=config.shadow.parallel_book_enabled,
+        ))
+    calibration = CalibratorLoop(Calibrator())
+
     scheduler = SchedulerManager.get_instance()
     _register_jobs(
         scheduler, config, sentinel, triage, swarm, structurer, governor, executor,
-        positions, reconcile, universe,
+        positions, reconcile, shadow, calibration, universe,
     )
 
     try:

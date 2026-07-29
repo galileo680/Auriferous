@@ -50,6 +50,8 @@ jobs:
   executor_seconds: 60
   position_seconds: 60
   reconcile_seconds: 300
+  shadow_seconds: 300
+  calibration_seconds: 86400
   pdufa_refresh_seconds: 604800
   universe_refresh_seconds: 604800
   earnings_refresh_seconds: 86400

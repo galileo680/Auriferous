@@ -209,6 +209,9 @@ class ShadowTrade(Base):
     __tablename__ = "shadow_trades"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("events.id"), nullable=True, index=True
+    )
     analysis_id: Mapped[Optional[int]] = mapped_column(
         Integer, ForeignKey("analyses.id"), nullable=True, index=True
     )

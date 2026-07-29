@@ -99,6 +99,8 @@ class JobsConfig(BaseModel):
     executor_seconds: int = Field(default=60, ge=15)
     position_seconds: int = Field(default=60, ge=15)
     reconcile_seconds: int = Field(default=300, ge=60)
+    shadow_seconds: int = Field(default=300, ge=60)
+    calibration_seconds: int = Field(default=86400, ge=3600)
     pdufa_refresh_seconds: int = Field(default=604800, ge=3600)
     universe_refresh_seconds: int = Field(default=604800, ge=3600)
     earnings_refresh_seconds: int = Field(default=86400, ge=3600)
