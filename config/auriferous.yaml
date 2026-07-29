@@ -6,9 +6,9 @@ system:
 
 capital:
   initial_usd: 2450
-  option_bucket_pct: 0.65
-  futures_bucket_pct: 0.25
-  cash_buffer_pct: 0.10
+  option_bucket_pct: 0.80
+  futures_bucket_pct: 0.0
+  cash_buffer_pct: 0.20
 
 broker:
   host: '127.0.0.1'
@@ -45,6 +45,7 @@ jobs:
   sentinel_seconds: 30
   triage_seconds: 60
   swarm_seconds: 120
+  structurer_seconds: 180
   pdufa_refresh_seconds: 604800
   universe_refresh_seconds: 604800
   earnings_refresh_seconds: 86400
@@ -61,7 +62,7 @@ swarm:
   pricedin_veto_threshold: 0.65
   min_conviction: 0.55
   max_per_day: 25
-  max_cost_usd_per_day: 8.0
+  max_cost_usd_per_day: 2.0
   fetch_filing_text: true
 
 structurer:
@@ -78,6 +79,9 @@ structurer:
   iv_rank_skip_threshold: 80
   max_premium_pct_of_equity: 0.10
   max_stock_price: 200.0
+  binary_event_max_horizon_days: 21
+  stock_max_price_for_direct: 60.0
+  min_conviction_for_long_premium: 0.60
 
 risk:
   kelly_fraction: 0.25
@@ -86,7 +90,7 @@ risk:
   max_position_pct: 0.10
   max_total_premium_pct: 0.35
   max_concurrent_options: 6
-  max_concurrent_futures: 2
+  max_concurrent_futures: 0
   max_same_catalyst_type: 2
   max_same_sector: 2
   drawdown_caution: 0.10

@@ -221,6 +221,8 @@ class SwarmLoop:
             decision=verdict.outcome.value,
             veto_reason=verdict.veto_reason,
             llm_cost_usd=Decimal(str(round(verdict.cost.usd, 4))),
+            horizon_days=verdict.time_horizon_days or None,
+            catalyst_type=event.catalyst_type,
         )
         await AnalysisRepository(session).create(analysis)
 

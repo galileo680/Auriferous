@@ -109,6 +109,10 @@ class Analysis(Base):
     decision: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
     veto_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     llm_cost_usd: Mapped[Optional[Decimal]] = mapped_column(Numeric(8, 4), nullable=True)
+    horizon_days: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    catalyst_type: Mapped[Optional[str]] = mapped_column(String(30), nullable=True, index=True)
+    structure_result: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    structured_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=func.now(), index=True
     )

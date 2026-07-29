@@ -94,6 +94,7 @@ class JobsConfig(BaseModel):
     sentinel_seconds: int = Field(default=30, ge=10)
     triage_seconds: int = Field(default=60, ge=15)
     swarm_seconds: int = Field(default=120, ge=30)
+    structurer_seconds: int = Field(default=180, ge=30)
     pdufa_refresh_seconds: int = Field(default=604800, ge=3600)
     universe_refresh_seconds: int = Field(default=604800, ge=3600)
     earnings_refresh_seconds: int = Field(default=86400, ge=3600)
@@ -130,6 +131,9 @@ class StructurerConfig(BaseModel):
     iv_rank_skip_threshold: float = Field(default=80.0, ge=0, le=100)
     max_premium_pct_of_equity: float = Field(default=0.10, gt=0, le=1.0)
     max_stock_price: float = Field(default=200.0, gt=0)
+    binary_event_max_horizon_days: int = Field(default=21, ge=1)
+    stock_max_price_for_direct: float = Field(default=60.0, gt=0)
+    min_conviction_for_long_premium: float = Field(default=0.60, gt=0, le=1.0)
 
     @model_validator(mode="after")
     def validate_deltas(self) -> "StructurerConfig":

@@ -32,12 +32,15 @@ from src.triage.loop import TriageLoop
 from src.swarm.agents import SwarmAgents
 from src.swarm.evidence import EvidenceCollector
 from src.swarm.loop import SwarmLoop
+from src.broker.ibkr import IBKRClient
+from src.structurer.loop import StructurerLoop
 
 logger = structlog.get_logger("Auriferous")
 
 JOB_SENTINEL = "sentinel"
 JOB_TRIAGE = "triage"
 JOB_SWARM = "swarm"
+JOB_STRUCTURER = "structurer"
 JOB_PDUFA = "pdufa_refresh"
 JOB_EARNINGS = "earnings_refresh"
 JOB_UNIVERSE = "universe_refresh"
@@ -45,6 +48,7 @@ JOB_UNIVERSE = "universe_refresh"
 TIMEOUT_SENTINEL = 300.0
 TIMEOUT_TRIAGE = 900.0
 TIMEOUT_SWARM = 1800.0
+TIMEOUT_STRUCTURER = 900.0
 TIMEOUT_PDUFA = 3600.0
 TIMEOUT_EARNINGS = 3600.0
 TIMEOUT_UNIVERSE = 14400.0
@@ -72,6 +76,7 @@ def _register_jobs(
     sentinel: SentinelLoop,
     triage: TriageLoop | None,
     swarm: SwarmLoop | None,
+    structurer: StructurerLoop | None,
     universe: UniverseIndex,
 ) -> None:
 
@@ -83,6 +88,9 @@ def _register_jobs(
 
     async def run_swarm() -> None:
         await swarm.run()
+
+    async def run_structurer() -> None:
+        await structurer.run()
 
     async def run_pdufa_refresh() -> None:
         from scripts.refresh_pdufa import main as refresh_pdufa_main
@@ -119,6 +127,13 @@ def _register_jobs(
         interval_seconds=config.jobs.swarm_seconds,
         max_timeout=TIMEOUT_SWARM,
         enabled=swarm is not None,
+    )
+    scheduler.register(
+        job_id=JOB_STRUCTURER,
+        callback=run_structurer,
+        interval_seconds=config.jobs.structurer_seconds,
+        max_timeout=TIMEOUT_STRUCTURER,
+        enabled=structurer is not None,
     )
     scheduler.register(
         job_id=JOB_PDUFA,
@@ -232,8 +247,20 @@ async def main(config_path: str = "config/auriferous.yaml") -> None:
             note="no OPENAI_API_KEY — sentinel will collect events but nothing will analyse them",
         )
 
+    broker = IBKRClient(config.broker)
+    structurer: StructurerLoop | None = None
+    try:
+        await broker.connect()
+        structurer = StructurerLoop(broker, config.structurer, config.capital.initial_usd)
+    except Exception as e:
+        logger.warning(
+            "structurer_disabled",
+            error=str(e),
+            note="IB Gateway unreachable — analysis will run but no contracts will be built",
+        )
+
     scheduler = SchedulerManager.get_instance()
-    _register_jobs(scheduler, config, sentinel, triage, swarm, universe)
+    _register_jobs(scheduler, config, sentinel, triage, swarm, structurer, universe)
 
     try:
         await scheduler.start()
@@ -245,6 +272,8 @@ async def main(config_path: str = "config/auriferous.yaml") -> None:
         await scheduler.stop(timeout=30.0)
         await sentinel.close()
         await edgar.close()
+        if broker.is_connected():
+            await broker.disconnect()
         await db.close()
         logger.info("auriferous_stopped")
 
