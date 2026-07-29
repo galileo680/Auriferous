@@ -13,6 +13,7 @@ from src.broker.options import OptionSelector, check_liquidity, rank_by_delta, s
 from src.core.config import StructurerConfig
 from src.sentinel.models import MARKET_CRYPTO
 from src.structurer.models import (
+    NICHE_CATALYSTS,
     InstrumentChoice,
     InstrumentDecision,
     IVProfile,
@@ -52,6 +53,7 @@ class TradeBuilder:
         iv: IVProfile,
         event_date: date | None,
         invalidation: list[str],
+        catalyst_type: str | None = None,
     ) -> StructureResult:
         if decision.choice is InstrumentChoice.SKIP:
             return StructureResult(
@@ -78,9 +80,52 @@ class TradeBuilder:
             return await self._build_stock(decision, **common)
 
         if decision.choice.is_spread:
-            return await self._build_spread(decision, event_date, **common)
+            result = await self._build_spread(decision, event_date, **common)
+        else:
+            result = await self._build_long_option(decision, event_date, **common)
 
-        return await self._build_long_option(decision, event_date, **common)
+        if self._fallback_applies(result, market, direction, catalyst_type):
+            fallback_decision = InstrumentDecision(
+                choice=InstrumentChoice.STOCK,
+                reason=f"stock fallback for a niche catalyst — {result.reason}",
+                binary_event=decision.binary_event,
+            )
+            fallback = await self._build_stock(
+                fallback_decision,
+                price_cap=self._config.stock_max_price_for_direct,
+                **common,
+            )
+            if fallback.structured:
+                fallback.trade.notes.append(
+                    "stock fallback — niche catalyst with no liquid option (§6.2a)"
+                )
+                self._logger.info(
+                    "stock_fallback_used",
+                    ticker=ticker,
+                    catalyst_type=catalyst_type,
+                    original_reason=result.reason,
+                )
+                return fallback
+
+        return result
+
+    @staticmethod
+    def _fallback_applies(
+        result: StructureResult,
+        market: str,
+        direction: str,
+        catalyst_type: str | None,
+    ) -> bool:
+        return (
+            result.outcome in (
+                StructureOutcome.SKIP_NO_CONTRACT,
+                StructureOutcome.SKIP_ILLIQUID,
+            )
+            and market != MARKET_CRYPTO
+            and direction.upper() == "LONG"
+            and catalyst_type is not None
+            and catalyst_type.upper() in NICHE_CATALYSTS
+        )
 
     async def _underlying_price(self, ticker: str) -> float | None:
         try:
@@ -278,7 +323,10 @@ class TradeBuilder:
         target_move_pct: float,
         iv: IVProfile,
         invalidation: list[str],
+        price_cap: float | None = None,
     ) -> StructureResult:
+        ceiling = price_cap if price_cap is not None else self._config.max_stock_price
+
         price = await self._underlying_price(ticker)
         if price is None:
             return StructureResult(
@@ -287,11 +335,11 @@ class TradeBuilder:
                 reason="no usable quote for the underlying",
             )
 
-        if price > self._config.max_stock_price:
+        if price > ceiling:
             return StructureResult(
                 outcome=StructureOutcome.SKIP_TOO_EXPENSIVE,
                 decision=decision,
-                reason=f"share price ${price:.2f} above the ${self._config.max_stock_price:.0f} ceiling",
+                reason=f"share price ${price:.2f} above the ${ceiling:.0f} ceiling",
             )
 
         stop_distance = price * 0.15

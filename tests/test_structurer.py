@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -9,10 +11,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.core.config import StructurerConfig
 from src.sentinel.models import MARKET_CRYPTO, MARKET_EQUITY
+from src.structurer.builder import TradeBuilder
 from src.structurer.decision import choose_instrument, is_binary_event
 from src.structurer.iv import percentile_rank, realized_volatility
 from src.structurer.models import (
     InstrumentChoice,
+    InstrumentDecision,
     IVProfile,
     StructureOutcome,
     StructureResult,
@@ -181,3 +185,72 @@ def test_every_skip_outcome_is_flagged_as_a_skip():
     assert StructureOutcome.SKIP_NO_CONTRACT.is_skip
     assert StructureOutcome.SKIP_ERROR.is_skip
     assert not StructureOutcome.STRUCTURED.is_skip
+
+
+class _StubOptions:
+    async def find_contract(self, **kwargs):
+        return None
+
+
+class _FakeBroker:
+    def __init__(self, price: float) -> None:
+        self._price = price
+
+    async def get_quote(self, spec):
+        return SimpleNamespace(last=self._price)
+
+
+def build_with_illiquid_options(
+    direction: str = "LONG",
+    catalyst: str | None = "ACCOUNTING_RED_FLAG",
+    price: float = 25.0,
+    choice: InstrumentChoice = InstrumentChoice.LONG_CALL,
+) -> StructureResult:
+    async def runner():
+        builder = TradeBuilder(_FakeBroker(price), CONFIG, equity=2450.0)
+        builder._options = _StubOptions()
+        return await builder.build(
+            ticker="TEST",
+            market=MARKET_EQUITY,
+            direction=direction,
+            decision=InstrumentDecision(choice=choice, reason="test", binary_event=True),
+            conviction=0.70,
+            horizon_days=10,
+            target_move_pct=15.0,
+            iv=IVProfile(),
+            event_date=None,
+            invalidation=[],
+            catalyst_type=catalyst,
+        )
+
+    return asyncio.run(runner())
+
+
+def test_niche_long_with_illiquid_options_falls_back_to_stock():
+    result = build_with_illiquid_options()
+    assert result.structured
+    assert result.trade.choice is InstrumentChoice.STOCK
+    assert any("stock fallback" in note for note in result.trade.notes)
+
+
+def test_spread_choice_also_falls_back_for_niche_catalysts():
+    result = build_with_illiquid_options(choice=InstrumentChoice.CALL_DEBIT_SPREAD)
+    assert result.structured
+    assert result.trade.choice is InstrumentChoice.STOCK
+
+
+def test_short_thesis_never_uses_the_stock_fallback():
+    result = build_with_illiquid_options(
+        direction="SHORT", choice=InstrumentChoice.LONG_PUT
+    )
+    assert result.outcome is StructureOutcome.SKIP_NO_CONTRACT
+
+
+def test_non_niche_catalyst_does_not_fall_back():
+    result = build_with_illiquid_options(catalyst="GUIDANCE")
+    assert result.outcome is StructureOutcome.SKIP_NO_CONTRACT
+
+
+def test_fallback_respects_the_direct_stock_price_ceiling():
+    result = build_with_illiquid_options(price=95.0)
+    assert result.outcome is StructureOutcome.SKIP_NO_CONTRACT

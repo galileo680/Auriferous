@@ -14,6 +14,12 @@ BINARY_CATALYSTS = frozenset({
     "ACCOUNTING_RED_FLAG",
 })
 
+NICHE_CATALYSTS = frozenset({
+    "ACCOUNTING_RED_FLAG",
+    "LEGAL",
+    "MGMT_CHANGE",
+})
+
 
 class InstrumentChoice(str, Enum):
     LONG_CALL = "LONG_CALL"

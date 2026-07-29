@@ -113,6 +113,8 @@ class Analysis(Base):
     catalyst_type: Mapped[Optional[str]] = mapped_column(String(30), nullable=True, index=True)
     structure_result: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     structured_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
+    risk_verdict: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    governed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=func.now(), index=True
     )

@@ -16,7 +16,6 @@ from src.dataflows.edgar import EdgarClient
 from src.dataflows.pdufa_harvester import PdufaHarvester
 from src.sentinel.loop import SentinelLoop
 from src.sentinel.sources import (
-    CryptoFlowSource,
     EarningsCalendarSource,
     EdgarFilingSource,
     HaltSource,
@@ -34,6 +33,10 @@ from src.swarm.evidence import EvidenceCollector
 from src.swarm.loop import SwarmLoop
 from src.broker.ibkr import IBKRClient
 from src.structurer.loop import StructurerLoop
+from src.database.repositories.equity import EquityRepository
+from src.risk.budget import daily_llm_budget
+from src.risk.governor import RiskGovernor
+from src.risk.loop import GovernorLoop
 
 logger = structlog.get_logger("Auriferous")
 
@@ -41,6 +44,7 @@ JOB_SENTINEL = "sentinel"
 JOB_TRIAGE = "triage"
 JOB_SWARM = "swarm"
 JOB_STRUCTURER = "structurer"
+JOB_GOVERNOR = "governor"
 JOB_PDUFA = "pdufa_refresh"
 JOB_EARNINGS = "earnings_refresh"
 JOB_UNIVERSE = "universe_refresh"
@@ -49,6 +53,7 @@ TIMEOUT_SENTINEL = 300.0
 TIMEOUT_TRIAGE = 900.0
 TIMEOUT_SWARM = 1800.0
 TIMEOUT_STRUCTURER = 900.0
+TIMEOUT_GOVERNOR = 300.0
 TIMEOUT_PDUFA = 3600.0
 TIMEOUT_EARNINGS = 3600.0
 TIMEOUT_UNIVERSE = 14400.0
@@ -77,6 +82,7 @@ def _register_jobs(
     triage: TriageLoop | None,
     swarm: SwarmLoop | None,
     structurer: StructurerLoop | None,
+    governor: GovernorLoop,
     universe: UniverseIndex,
 ) -> None:
 
@@ -91,6 +97,9 @@ def _register_jobs(
 
     async def run_structurer() -> None:
         await structurer.run()
+
+    async def run_governor() -> None:
+        await governor.run()
 
     async def run_pdufa_refresh() -> None:
         from scripts.refresh_pdufa import main as refresh_pdufa_main
@@ -134,6 +143,12 @@ def _register_jobs(
         interval_seconds=config.jobs.structurer_seconds,
         max_timeout=TIMEOUT_STRUCTURER,
         enabled=structurer is not None,
+    )
+    scheduler.register(
+        job_id=JOB_GOVERNOR,
+        callback=run_governor,
+        interval_seconds=config.jobs.governor_seconds,
+        max_timeout=TIMEOUT_GOVERNOR,
     )
     scheduler.register(
         job_id=JOB_PDUFA,
@@ -229,6 +244,19 @@ async def main(config_path: str = "config/auriferous.yaml") -> None:
         return
     await db.create_tables()
 
+    if config.system.mode == "live":
+        async with db.session() as session:
+            latest = await EquityRepository(session).get_latest()
+        live_equity = float(latest.equity) if latest else config.capital.initial_usd
+        config.swarm.max_cost_usd_per_day = daily_llm_budget(
+            live_equity, config.system.mode, config.swarm.max_cost_usd_per_day
+        )
+        logger.info(
+            "llm_budget_live",
+            equity=round(live_equity, 2),
+            max_cost_usd_per_day=config.swarm.max_cost_usd_per_day,
+        )
+
     edgar = EdgarClient(config.sentinel.contact_email)
     sentinel = SentinelLoop([
         EdgarFilingSource(edgar, universe, config.sentinel),
@@ -236,7 +264,6 @@ async def main(config_path: str = "config/auriferous.yaml") -> None:
         PdufaSource(universe, config.sentinel),
         VolumeAnomalySource(universe, config.sentinel),
         EarningsCalendarSource(universe),
-        CryptoFlowSource(),
     ])
 
     triage = _build_triage(config, universe)
@@ -259,8 +286,12 @@ async def main(config_path: str = "config/auriferous.yaml") -> None:
             note="IB Gateway unreachable — analysis will run but no contracts will be built",
         )
 
+    governor = GovernorLoop(RiskGovernor(config.risk, config.capital, universe))
+
     scheduler = SchedulerManager.get_instance()
-    _register_jobs(scheduler, config, sentinel, triage, swarm, structurer, universe)
+    _register_jobs(
+        scheduler, config, sentinel, triage, swarm, structurer, governor, universe
+    )
 
     try:
         await scheduler.start()

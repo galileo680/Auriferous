@@ -154,6 +154,7 @@ class StructurerLoop:
             iv=iv,
             event_date=self._event_date(horizon),
             invalidation=self._invalidation(analysis),
+            catalyst_type=analysis.catalyst_type,
         )
 
     async def _peek_price(self, ticker: str, market: str) -> float | None:
