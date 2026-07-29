@@ -36,7 +36,10 @@ from src.core.market_clock import MarketClock
 from src.database.repositories.equity import EquityRepository
 from src.executor.engine import ExecutionEngine
 from src.executor.loop import ExecutorLoop
+from src.positions.manager import PositionManager
+from src.positions.reconcile import ReconcileLoop
 from src.risk.budget import daily_llm_budget
+from src.risk.drawdown import DrawdownTracker
 from src.risk.governor import RiskGovernor
 from src.risk.loop import GovernorLoop
 from src.structurer.loop import StructurerLoop
@@ -49,6 +52,8 @@ JOB_SWARM = "swarm"
 JOB_STRUCTURER = "structurer"
 JOB_GOVERNOR = "governor"
 JOB_EXECUTOR = "executor"
+JOB_POSITIONS = "positions"
+JOB_RECONCILE = "reconcile"
 JOB_PDUFA = "pdufa_refresh"
 JOB_EARNINGS = "earnings_refresh"
 JOB_UNIVERSE = "universe_refresh"
@@ -59,6 +64,8 @@ TIMEOUT_SWARM = 1800.0
 TIMEOUT_STRUCTURER = 900.0
 TIMEOUT_GOVERNOR = 300.0
 TIMEOUT_EXECUTOR = 600.0
+TIMEOUT_POSITIONS = 600.0
+TIMEOUT_RECONCILE = 120.0
 TIMEOUT_PDUFA = 3600.0
 TIMEOUT_EARNINGS = 3600.0
 TIMEOUT_UNIVERSE = 14400.0
@@ -89,6 +96,8 @@ def _register_jobs(
     structurer: StructurerLoop | None,
     governor: GovernorLoop,
     executor: ExecutorLoop | None,
+    positions: PositionManager | None,
+    reconcile: ReconcileLoop | None,
     universe: UniverseIndex,
 ) -> None:
 
@@ -109,6 +118,12 @@ def _register_jobs(
 
     async def run_executor() -> None:
         await executor.run()
+
+    async def run_positions() -> None:
+        await positions.run()
+
+    async def run_reconcile() -> None:
+        await reconcile.run()
 
     async def run_pdufa_refresh() -> None:
         from scripts.refresh_pdufa import main as refresh_pdufa_main
@@ -165,6 +180,20 @@ def _register_jobs(
         interval_seconds=config.jobs.executor_seconds,
         max_timeout=TIMEOUT_EXECUTOR,
         enabled=executor is not None,
+    )
+    scheduler.register(
+        job_id=JOB_POSITIONS,
+        callback=run_positions,
+        interval_seconds=config.jobs.position_seconds,
+        max_timeout=TIMEOUT_POSITIONS,
+        enabled=positions is not None,
+    )
+    scheduler.register(
+        job_id=JOB_RECONCILE,
+        callback=run_reconcile,
+        interval_seconds=config.jobs.reconcile_seconds,
+        max_timeout=TIMEOUT_RECONCILE,
+        enabled=reconcile is not None,
     )
     scheduler.register(
         job_id=JOB_PDUFA,
@@ -293,10 +322,22 @@ async def main(config_path: str = "config/auriferous.yaml") -> None:
     broker = IBKRClient(config.broker)
     structurer: StructurerLoop | None = None
     executor: ExecutorLoop | None = None
+    positions: PositionManager | None = None
+    reconcile: ReconcileLoop | None = None
     try:
         await broker.connect()
+        clock = MarketClock()
+        engine = ExecutionEngine(broker)
         structurer = StructurerLoop(broker, config.structurer, config.capital.initial_usd)
-        executor = ExecutorLoop(broker, ExecutionEngine(broker), MarketClock())
+        executor = ExecutorLoop(broker, engine, clock)
+        positions = PositionManager(
+            broker,
+            engine,
+            config.positions,
+            clock,
+            DrawdownTracker(config.risk, config.capital.initial_usd),
+        )
+        reconcile = ReconcileLoop(broker)
     except Exception as e:
         logger.warning(
             "broker_stages_disabled",
@@ -309,7 +350,7 @@ async def main(config_path: str = "config/auriferous.yaml") -> None:
     scheduler = SchedulerManager.get_instance()
     _register_jobs(
         scheduler, config, sentinel, triage, swarm, structurer, governor, executor,
-        universe,
+        positions, reconcile, universe,
     )
 
     try:

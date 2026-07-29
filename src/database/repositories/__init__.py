@@ -6,6 +6,7 @@ from .equity import (
     EquityRepository,
     classify_drawdown,
 )
+from .errors import ErrorRepository
 from .event import EventRepository
 from .trade import TradeRepository
 
@@ -15,6 +16,7 @@ __all__ = [
     "AnalysisRepository",
     "TradeRepository",
     "EquityRepository",
+    "ErrorRepository",
     "classify_drawdown",
     "DRAWDOWN_SIZE_MULTIPLIER",
     "DRAWDOWN_MIN_CONVICTION",

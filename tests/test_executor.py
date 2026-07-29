@@ -29,9 +29,11 @@ from src.database.models import (
     TRADE_STATUS_REJECTED,
     Analysis,
     Base,
+    ErrorLog,
     Event,
     Trade,
 )
+from src.positions.models import ERROR_EXPIRY_CLOSE_FAILED
 from src.executor.engine import ExecutionEngine, initial_limit, tick_size
 from src.executor.loop import ExecutorLoop
 from src.executor.models import ExecutionOutcome
@@ -469,6 +471,22 @@ def test_executor_cancels_stale_pending_orders_after_restart():
     assert result.expired_pending == 1
     assert trades[0].status == TRADE_STATUS_EXPIRED
     assert broker.cancelled == ["42"]
+
+
+def test_executor_halts_on_a_blocking_error():
+    seeds: list = [ErrorLog(
+        component="PositionManager",
+        error_type=ERROR_EXPIRY_CLOSE_FAILED,
+        message="expiry close failed",
+    )]
+    seed_analysis(seeds)
+    broker = FakeBroker(1.40, 1.60, fills=[filled(2, 1.50)])
+
+    result, trades, _ = run_executor(seeds, broker)
+
+    assert result.examined == 0
+    assert trades == []
+    assert broker.placed == []
 
 
 def test_executor_executes_a_spread_as_two_legs():

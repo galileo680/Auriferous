@@ -17,7 +17,9 @@ from src.database.repositories.equity import (
     DRAWDOWN_MIN_CONVICTION,
     DRAWDOWN_SIZE_MULTIPLIER,
 )
+from src.database.repositories.errors import ErrorRepository
 from src.database.repositories.trade import TradeRepository
+from src.positions.models import BLOCKING_ERROR_TYPES
 from src.risk.drawdown import DrawdownSnapshot, DrawdownTracker
 from src.risk.kelly import conviction_bucket, payoff_odds, position_fraction
 from src.risk.models import P_SOURCE_CALIBRATED, P_SOURCE_FALLBACK, RiskVerdict
@@ -71,6 +73,13 @@ class RiskGovernor:
 
         if snapshot.state == DRAWDOWN_HALT:
             return veto("drawdown HALT — manual reset required (scripts/reset_halt.py)")
+
+        blocking = await ErrorRepository(session).unresolved(BLOCKING_ERROR_TYPES)
+        if blocking:
+            return veto(
+                f"blocked by unresolved critical error: {blocking[0].error_type} — "
+                f"resolve it and run scripts/resolve_errors.py"
+            )
 
         conviction = float(analysis.conviction or 0)
         floor = DRAWDOWN_MIN_CONVICTION[snapshot.state]

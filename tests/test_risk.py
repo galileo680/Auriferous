@@ -22,9 +22,11 @@ from src.database.models import (
     Base,
     CalibrationSnapshot,
     EquityCurve,
+    ErrorLog,
     Event,
     Trade,
 )
+from src.positions.models import ERROR_RECONCILE_MISMATCH
 from src.risk.budget import daily_llm_budget
 from src.risk.drawdown import next_state, recovery_boundary
 from src.risk.governor import RiskGovernor
@@ -435,6 +437,20 @@ def test_governor_applies_the_caution_conviction_floor():
 
     assert verdict["approved"] is False
     assert "below the CAUTION floor" in verdict["veto_reason"]
+
+
+def test_governor_vetoes_when_a_critical_error_is_unresolved():
+    blocker = ErrorLog(
+        component="ReconcileLoop",
+        error_type=ERROR_RECONCILE_MISMATCH,
+        message="positions diverge from the broker",
+    )
+    _, analyses = run_governor(
+        [("AAA", structured_payload(), {})],
+        seed_trades=[blocker],
+        seed_calibration=[calibration_row()],
+    )
+    assert "blocked by unresolved critical error" in analyses[0].risk_verdict["veto_reason"]
 
 
 def test_governor_skips_unstructured_analyses_without_a_verdict():

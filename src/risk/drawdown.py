@@ -77,14 +77,25 @@ class DrawdownTracker:
         self._initial = initial_equity
         self._logger = structlog.get_logger("DrawdownTracker")
 
-    async def snapshot(self, session: AsyncSession, persist: bool = True) -> DrawdownSnapshot:
+    async def snapshot(
+        self,
+        session: AsyncSession,
+        persist: bool = True,
+        unrealized_pnl: float | None = None,
+    ) -> DrawdownSnapshot:
         trades = TradeRepository(session)
         equity_repo = EquityRepository(session)
 
         realized = float(await trades.realized_pnl_total())
-        equity = self._initial + realized
-
         latest = await equity_repo.get_latest()
+
+        if unrealized_pnl is None:
+            unrealized_pnl = (
+                float(latest.equity) - self._initial - float(latest.realized_pnl)
+                if latest else 0.0
+            )
+        equity = self._initial + realized + unrealized_pnl
+
         previous_state = latest.drawdown_state if latest else DRAWDOWN_NORMAL
         baseline = float(latest.high_water_mark) if latest else self._initial
         hwm = max(baseline, equity)

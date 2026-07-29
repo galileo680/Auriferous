@@ -21,10 +21,11 @@ from src.database.models import (
     Analysis,
     Trade,
 )
-from src.database.repositories import EventRepository, TradeRepository
+from src.database.repositories import ErrorRepository, EventRepository, TradeRepository
 from src.database.session import DatabaseManager
 from src.executor.engine import ExecutionEngine
 from src.executor.models import ExecutionOutcome, ExecutionResult
+from src.positions.models import BLOCKING_ERROR_TYPES
 from src.risk.governor import CHOICE_TO_INSTRUMENT
 from src.sentinel.models import MARKET_CRYPTO, MARKET_EQUITY
 
@@ -67,6 +68,15 @@ class ExecutorLoop:
 
         async with db.session() as session:
             await self._expire_stale_pending(session, result)
+
+            blocking = await ErrorRepository(session).unresolved(BLOCKING_ERROR_TYPES)
+            if blocking:
+                self._logger.error(
+                    "executor_blocked",
+                    error_type=blocking[0].error_type,
+                    note="no new positions until the critical error is resolved",
+                )
+                return result
 
             approved = await self._pending_approved(session)
             if not approved:
