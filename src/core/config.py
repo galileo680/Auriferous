@@ -294,3 +294,7 @@ class ConfigLoader:
         alerts = raw.setdefault("alerts", {})
         if not alerts.get("webhook_url"):
             alerts["webhook_url"] = os.getenv("ALERT_WEBHOOK_URL")
+
+        sentinel = raw.setdefault("sentinel", {})
+        if not sentinel.get("contact_email"):
+            sentinel["contact_email"] = os.getenv("SENTINEL_CONTACT_EMAIL", "")

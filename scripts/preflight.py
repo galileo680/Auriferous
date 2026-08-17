@@ -187,6 +187,14 @@ async def main(config_path: str = "config/auriferous.yaml") -> int:
     else:
         checklist.add(PASS, "llm api key", "present")
 
+    if not config.sentinel.contact_email:
+        checklist.add(
+            FAIL, "sentinel contact email",
+            "SENTINEL_CONTACT_EMAIL missing — SEC requires a contact in the User-Agent",
+        )
+    else:
+        checklist.add(PASS, "sentinel contact email", "present")
+
     check_universe(checklist)
     check_pdufa(checklist)
 

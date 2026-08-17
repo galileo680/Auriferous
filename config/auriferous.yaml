@@ -39,7 +39,7 @@ sentinel:
   edgar_items: ['1.01', '1.03', '2.02', '4.01', '4.02', '5.02', '7.01', '8.01']
   halt_codes: ['T1', 'T12', 'LUDP']
   pdufa_window_days: [-5, 2]
-  contact_email: 'kyyk1487@gmail.com'
+  contact_email: ''
 
 jobs:
   sentinel_seconds: 30
