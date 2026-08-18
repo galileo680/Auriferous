@@ -131,8 +131,7 @@ SENTINEL_CONTACT_EMAIL=...     # SEC requires a contact email in the EDGAR User-
 ALERT_WEBHOOK_URL=...          # optional: Discord/Slack webhook for alerts
 ```
 
-Review `config/auriferous.yaml`: capital, broker port, budgets, risk limits. All thresholds are documented in `other/auriferous-implemetacja.md` (full implementation specification, in Polish).
-
+Review `config/auriferous.yaml`: capital, broker port, budgets, risk limits.
 ## Running
 
 First run:
